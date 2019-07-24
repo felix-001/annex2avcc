@@ -1,4 +1,4 @@
-// Last Update:2019-07-24 17:48:08
+// Last Update:2019-07-24 17:49:06
 
 #include <stdio.h>
 #include <sys/stat.h>
@@ -74,7 +74,7 @@ int h264_annexb2avcc( char *in, char *out )
                 }
             } 
 
-            if ( last_nalu_type == NALU_TYPE_PPS && nalu_type == NALU_TYPE_IDR ) {
+            if ( last_nalu_type == NALU_TYPE_PPS ) {
                 if ( nalu_type == NALU_TYPE_IDR) {
                     LOGI("meet idr, the last is pps, skip\n");
                     last_nalu_type = nalu_type;
