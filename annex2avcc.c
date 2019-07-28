@@ -1,4 +1,4 @@
-// Last Update:2019-07-24 17:49:06
+// Last Update:2019-07-28 14:00:27
 
 #include <stdio.h>
 #include <sys/stat.h>
@@ -22,6 +22,36 @@
 #define NALU_TYPE_SPS 7
 #define NALU_TYPE_PPS 8
 #define NALU_TYPE_NON_IDR 1
+#define NALU_TYPE_AUD 9
+
+int dump_stream( int nalu_type )
+{
+    switch( nalu_type ) {
+    case NALU_TYPE_SEI:
+        printf("|  SEI " );
+        break;
+    case NALU_TYPE_SPS:
+        printf("|  SPS " );
+        break;
+    case NALU_TYPE_PPS:
+        printf("|  PPS ");
+        break;
+    case NALU_TYPE_IDR:
+        printf("|  IDR ");
+        break;
+    case NALU_TYPE_NON_IDR:
+        printf("|NONIDR");
+        break;
+    case NALU_TYPE_AUD:
+        printf("|AUD");
+        break;
+    default:
+        LOGE("error, unknow nalu type, nalu_type = %d\n", nalu_type );
+        return -1;
+    }
+
+    return 0;
+}
 
 int h264_annexb2avcc( char *in, char *out )
 {
@@ -29,8 +59,9 @@ int h264_annexb2avcc( char *in, char *out )
     FILE *fo = fopen( out, "w+");
     struct stat statbuf;
     char *buf_ptr = NULL, *buf_end = NULL, *start = NULL;
+    unsigned char startcode3[3] = { 0x00, 0x00, 0x01 };
     unsigned char startcode[4] = { 0x00, 0x00, 0x00, 0x01 };
-    int len = 0, i = 0, last_nalu_type = 0, nalu_type = 0;
+    int len = 0, i = 0, last_nalu_type = 0, nalu_type = 0, startcode_len = 0;
 
     if ( !fi || !fo ) {
         LOGE("open file %s or %s error\n", in, out );
@@ -51,23 +82,34 @@ int h264_annexb2avcc( char *in, char *out )
     while( buf_ptr <= buf_end ) {
         if ( memcmp(startcode, buf_ptr, 4) == 0 ) {
             nalu_type = buf_ptr[4] & 0x1f;
-            //LOGI("nalu_type : %d\n", nalu_type );
+            startcode_len = 4;
+            i++;
+        } else if ( memcmp(startcode3, buf_ptr, 3) == 0 ) {
+            nalu_type = buf_ptr[3] & 0x1f;
+            startcode_len = 3;
+            i++;
+        } else {
+            buf_ptr++;
+            continue;
+        }
+
+
+        if ( startcode_len ) {
+
+            dump_stream( nalu_type );
+            
             if ( last_nalu_type == NALU_TYPE_SEI ) {
-                if (nalu_type == NALU_TYPE_SPS ) {
-                    LOGI("meet sps or non idr, the last is sei, skip\n");
-                    last_nalu_type = nalu_type;
-                    buf_ptr++;
-                    continue;
-                } else {
-                    LOGI("warning: the nalu after sei is not sps, nalu_type : %d\n", nalu_type );
-                }
+                //LOGI("meet sps or non idr, the last is sei, skip\n");
+                last_nalu_type = nalu_type;
+                buf_ptr += startcode_len;
+                continue;
             } 
 
             if ( last_nalu_type == NALU_TYPE_SPS ) {
                 if ( nalu_type == NALU_TYPE_PPS) {
-                    LOGI("meet pps, the last is sps, skip\n");
+                    //LOGI("meet pps, the last is sps, skip\n");
                     last_nalu_type = nalu_type;
-                    buf_ptr++;
+                    buf_ptr += startcode_len;
                     continue;
                 } else {
                     LOGI("warning: the nalu after sps is not pps, nalu_type: %d\n", nalu_type );
@@ -76,29 +118,30 @@ int h264_annexb2avcc( char *in, char *out )
 
             if ( last_nalu_type == NALU_TYPE_PPS ) {
                 if ( nalu_type == NALU_TYPE_IDR) {
-                    LOGI("meet idr, the last is pps, skip\n");
+                    //LOGI("meet idr, the last is pps, skip\n");
                     last_nalu_type = nalu_type;
-                    buf_ptr++;
+                    buf_ptr += startcode_len;
                     continue;
                 } else {
-                    LOGI("warning: the nalu after pps is not idr, nalu_type : %d\n", nalu_type);
+                    //LOGI("warning: the nalu after pps is not idr, nalu_type : %d\n", nalu_type);
                 }
             }
 
-            last_nalu_type = nalu_type;
-            i++;
-            if ( start ) {
+            //LOGI("last_nalu_type = %d\n", last_nalu_type );
+            if ( start && last_nalu_type != NALU_TYPE_AUD ) {
                 len = buf_ptr - start;
                 fwrite( &len, 4, 1, fo );
                 fwrite( start, len, 1, fo );
             }
+            last_nalu_type = nalu_type;
             start = buf_ptr;
+            buf_ptr += startcode_len;
+            startcode_len = 0;
         }
-        buf_ptr++;
     }
     fclose( fo );
 
-    LOGI("totol %d frames\n", i );
+    LOGI("totol %d nalu units\n", i );
     return 0;
 err:
     if ( fi )
