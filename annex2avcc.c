@@ -1,4 +1,4 @@
-// Last Update:2019-07-28 14:00:27
+// Last Update:2019-07-31 12:39:35
 
 #include <stdio.h>
 #include <sys/stat.h>
@@ -98,12 +98,16 @@ int h264_annexb2avcc( char *in, char *out )
 
             dump_stream( nalu_type );
             
+#if 0
             if ( last_nalu_type == NALU_TYPE_SEI ) {
                 //LOGI("meet sps or non idr, the last is sei, skip\n");
                 last_nalu_type = nalu_type;
+                if ( !start )
+                    start = buf_ptr;
                 buf_ptr += startcode_len;
                 continue;
             } 
+#endif
 
             if ( last_nalu_type == NALU_TYPE_SPS ) {
                 if ( nalu_type == NALU_TYPE_PPS) {
@@ -123,12 +127,12 @@ int h264_annexb2avcc( char *in, char *out )
                     buf_ptr += startcode_len;
                     continue;
                 } else {
-                    //LOGI("warning: the nalu after pps is not idr, nalu_type : %d\n", nalu_type);
+                    LOGI("warning: the nalu after pps is not idr, nalu_type : %d\n", nalu_type);
                 }
             }
 
             //LOGI("last_nalu_type = %d\n", last_nalu_type );
-            if ( start && last_nalu_type != NALU_TYPE_AUD ) {
+            if ( start && last_nalu_type != NALU_TYPE_AUD /*&& last_nalu_type != NALU_TYPE_SEI*/ ) {
                 len = buf_ptr - start;
                 fwrite( &len, 4, 1, fo );
                 fwrite( start, len, 1, fo );
